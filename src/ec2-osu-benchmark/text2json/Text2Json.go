@@ -40,10 +40,7 @@ type OsuBWTuple struct {
 }
 type OsuBW []OsuBWTuple
 
-type OsuBiBW struct {
-    Bw      []float64 `json:"bw"`
-    Pktsize []int `json:"pktsize"`
-}
+type OsuBiBW []OsuBWTuple
 
 type OsuLatencyTuple struct {
     Latency float64 `json:"latency"`
@@ -80,8 +77,48 @@ func (txt2jsonObj *Text2Json)GetAllFiles(path string) error {
 }
 
 func (txt2jsonObj *Text2Json)IsLatencyFile(fileName string) bool {
-    return strings.Contains(fileName, "latency") ||
-            strings.Contains(fileName, "LATENCY")
+    return strings.Contains(fileName, "osu_latency")
+}
+
+func (txt2jsonObj *Text2Json)IsBWFile(fileName string) bool {
+    return strings.Contains(fileName, "osu_bw")
+}
+
+func (txt2jsonObj *Text2Json)IsBiBWFile(fileName string) bool {
+    return strings.Contains(fileName, "osu_bibw")
+}
+
+func (txt2jsonObj *Text2Json)ReadOSUBWFile(fileName string) (
+                                []OsuBWTuple, error) {
+    logger := logging.GetLoggerInstance()
+    fileName = strings.Trim(fileName, "\n")
+
+    file, err := os.Open(fileName)
+    if err != nil {
+        logger.Error("Failed to open file %s", fileName)
+        return nil,err
+    }
+
+    defer file.Close()
+    bwresults := make([]OsuBWTuple, 0)
+    scanner := bufio.NewScanner(file)
+    for scanner.Scan() {
+        line := scanner.Text()
+        if strings.HasPrefix(line, "#") {
+            // Comment line, continue to next line
+            continue
+        }
+        lineArr := strings.Fields(line)
+        if len(lineArr) < 2 {
+            // Invalid data, cannot copy
+            continue
+        }
+        var bwtuple OsuBWTuple
+        bwtuple.Pktsize, _  = strconv.Atoi(lineArr[0])
+        bwtuple.Bw,_ = strconv.ParseFloat(lineArr[1], 64)
+        bwresults = append(bwresults, bwtuple)
+    }
+    return bwresults, errors.OP_SUCCESS
 }
 
 func (txt2jsonObj *Text2Json)ReadOSULatencyFile(fileName string,
@@ -125,16 +162,33 @@ func (txt2jsonObj *Text2Json)Init(resPath string) {
     txt2jsonObj.jsonFile = resPath + "osu-report.json"
 }
 
-func (txt2jsonObj *Text2Json)WriteLatency2Json() {
+func (txt2jsonObj *Text2Json)Read2JsonStruct() {
+    var err error
     logger := logging.GetLoggerInstance()
     var latencyResults OsuLatency
+    var bwresults []OsuBWTuple
+    var bibwresults []OsuBWTuple
     for _, fileName := range txt2jsonObj.filelist {
         if txt2jsonObj.IsLatencyFile(fileName) {
             // Process only latency files
             txt2jsonObj.ReadOSULatencyFile(fileName, &latencyResults)
             txt2jsonObj.jsonResults.OsuLatency = latencyResults
-            logger.Info("Processing of latency is complete")
-            break
+            logger.Info("Processing of latency results  is complete")
+        }
+        if txt2jsonObj.IsBWFile(fileName) {
+            //Process the bandwidth results
+            bwresults, err = txt2jsonObj.ReadOSUBWFile(fileName)
+            if err == errors.OP_SUCCESS {
+                //Write data only when the bw result processing is success
+                txt2jsonObj.jsonResults.OsuBW = bwresults
+            }
+        }
+        if txt2jsonObj.IsBiBWFile(fileName) {
+            bibwresults, err = txt2jsonObj.ReadOSUBWFile(fileName)
+            if err == errors.OP_SUCCESS {
+                //Write data only when the bw result processing is success
+                txt2jsonObj.jsonResults.OsuBiBW = bibwresults
+            }
         }
     }
 }
@@ -168,7 +222,7 @@ func (txt2jsonObj *Text2Json)WriteJsonFile() error{
 
 func (txt2jsonObj *Text2Json)ProcessResults2Json() error {
     txt2jsonObj.WriteTimestamp()
-    txt2jsonObj.WriteLatency2Json()
+    txt2jsonObj.Read2JsonStruct()
     err := txt2jsonObj.WriteJsonFile()
     return err
 }
