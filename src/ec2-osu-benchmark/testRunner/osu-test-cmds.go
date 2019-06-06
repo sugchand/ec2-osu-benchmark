@@ -54,12 +54,24 @@ func (chanObj *osu_result_channel)GetResultChannelData() (string, string) {
 }
 
 //*****************************************************************************
+func (mpi_cmd_obj *OSU_MPI_cmds)IsCmdExists(execmd string) bool {
+      cmd := exec.Command("/bin/sh", "-c", "command -v "+execmd)
+      if err := cmd.Run(); err != nil {
+              return false
+      }
+      return true
+}
+
 func (mpi_cmd_obj *OSU_MPI_cmds)Init_OSU_MPI_Cmds(MPIcount uint,
                                                   hostfile string) error {
     var err error
     err = errors.OP_SUCCESS
     logger := logging.GetLoggerInstance()
-    mpi_cmd_obj.mpirunCmd = fmt.Sprintf("/usr/bin/mpirun --np %d --hostfile %s",
+    if mpi_cmd_obj.IsCmdExists("mpirun") == false {
+        logger.Error("Failed to find 'mpirun' in the system")
+        return errors.CMD_NOT_FOUND
+    }
+    mpi_cmd_obj.mpirunCmd = fmt.Sprintf("mpirun --np %d --hostfile %s",
                              MPIcount, hostfile)
     // TODO :: May need to allow selective command execution.
     mpi_cmd_obj.osu_cmds = osu_cmds
@@ -93,6 +105,11 @@ func (mpi_cmd_obj *OSU_MPI_cmds)Run_OSU_MPI_Cmds() error {
     logger := logging.GetLoggerInstance()
 
     for _, cmd := range osu_cmds {
+        if mpi_cmd_obj.IsCmdExists(cmd) == false {
+            //Cannot find the command in the system.
+            logger.Error("Failed to run command %s, as its not found", cmd)
+            continue
+        }
         run_cmd := fmt.Sprintf("%s %s", mpi_cmd_obj.mpirunCmd, cmd)
         logger.Info(" *** Running test command %s ***\n", run_cmd)
         res, err = exec.Command("sh","-c", run_cmd).Output()
