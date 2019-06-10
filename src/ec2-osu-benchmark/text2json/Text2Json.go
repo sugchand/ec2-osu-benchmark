@@ -1,6 +1,7 @@
 package text2json
 
 import (
+    "fmt"
     "os"
     "strconv"
     "time"
@@ -60,6 +61,7 @@ type Text2Json struct {
     jsonFile string
     filelist []string
     jsonResults *OSUResults
+    configObj *config.AppConfig
 }
 
 func (txt2jsonObj *Text2Json)GetAllFiles(path string) error {
@@ -156,10 +158,11 @@ func (txt2jsonObj *Text2Json)ReadOSULatencyFile(fileName string,
     return errors.OP_SUCCESS
 }
 
-func (txt2jsonObj *Text2Json)Init(resPath string) {
+func (txt2jsonObj *Text2Json)Init(configObj *config.AppConfig,resPath string) {
     txt2jsonObj.GetAllFiles(resPath)
     txt2jsonObj.jsonResults = new(OSUResults)
     txt2jsonObj.jsonFile = resPath + "osu-report.json"
+    txt2jsonObj.configObj = configObj
 }
 
 func (txt2jsonObj *Text2Json)Read2JsonStruct() {
@@ -205,6 +208,61 @@ func (txt2jsonObj *Text2Json)WriteTimestamp() error {
     return err
 }
 
+// Function to populate matric data to a string.
+// Parameters
+// starttime :- time of the entry
+// mclass    :- type of matric/entry, can be bandwidth or latency
+// pktsize   :- size of packets used for measurements
+// valuetype :- type of value, can be bidirectional/unidirectional
+func (txt2jsonObj *Text2Json)AppendBW2MatricOutput(starttime time.Time,
+                            valuename string,
+                            bwvalues []OsuBWTuple,
+                            result *string) {
+    *result = "--------------------------------------------\n" +
+              "StartTime=" + strconv.FormatInt(starttime.Unix(), 10) + "\n" +
+              "Program=ec2-osu-benchmark\n" +
+              "Marketplace=" + txt2jsonObj.configObj.Region + "\n" +
+              "Host=" + txt2jsonObj.configObj.HostName + "\n" +
+              "Metrics="
+    for _,entry := range bwvalues {
+        *result = fmt.Sprintf("%sbw|%d|%s=%f,",*result,
+                               entry.Pktsize,
+                               valuename, entry.Bw)
+    }
+    *result = *result + "\n"
+}
+
+func (txt2jsonObj *Text2Json)_Write2MatricFile(result string) error{
+    logger := logging.GetLoggerInstance()
+    fp, err := os.OpenFile(txt2jsonObj.configObj.MatricFile,
+                           os.O_APPEND|os.O_CREATE|os.O_WRONLY,
+                           0644)
+    if err != nil {
+        logger.Error("Failed to create/open matric file %s",
+                            txt2jsonObj.configObj.MatricFile)
+        return err
+    }
+    defer fp.Close()
+    _, err = fp.Write([]byte(result))
+    if err != nil {
+        logger.Error("Failed to write results to file %s",
+                        txt2jsonObj.configObj.MatricFile)
+    }
+    return errors.OP_SUCCESS
+}
+
+func (txt2jsonObj *Text2Json)Write2MatricFile() error {
+    var bwresults string
+    //var bibwresults string
+    //var latencyresults string
+    txt2jsonObj.AppendBW2MatricOutput(txt2jsonObj.jsonResults.Timestamp,
+                        "UniDirBWinMB",
+                        ([]OsuBWTuple)(txt2jsonObj.jsonResults.OsuBW),
+                        &bwresults)
+    txt2jsonObj._Write2MatricFile(bwresults)
+    return errors.OP_SUCCESS
+}
+
 // Function to write the structure to json result file.
 func (txt2jsonObj *Text2Json)WriteJsonFile() error{
     logger := logging.GetLoggerInstance()
@@ -221,9 +279,14 @@ func (txt2jsonObj *Text2Json)WriteJsonFile() error{
 }
 
 func (txt2jsonObj *Text2Json)ProcessResults2Json() error {
+    logger := logging.GetLoggerInstance()
     txt2jsonObj.WriteTimestamp()
     txt2jsonObj.Read2JsonStruct()
     err := txt2jsonObj.WriteJsonFile()
+    if err != errors.OP_SUCCESS {
+        logger.Error("Failed to write to json file")
+    }
+    err = txt2jsonObj.Write2MatricFile()
     return err
 }
 

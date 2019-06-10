@@ -4,16 +4,20 @@ import (
     "os"
     "fmt"
     "flag"
+    "os/exec"
     "ec2-osu-benchmark/logging"
     "ec2-osu-benchmark/errors"
 )
 
 
 type AppConfig struct {
+    HostName string
     // Number of cores/processes to run the benchmark testing
     MPIcount uint
     //hostfile with all the hostnames involved in the testing
     HostFile string
+    MatricFile string // Matric output file
+    Region string // Region at which the instance belongs to
     LogFile string 
     Loglevel int64
 }
@@ -25,6 +29,8 @@ const (
     DEFAULT_MPI_COUNT = 2
     DEFAULT_MPI_HOSTFILE = DEFAULT_PATH + "hostfile"
     DEFAULT_TIME_LAYOUT = "2006-01-02T15:04:05.999999-07:00"
+    DEFAULT_MATRIC_OUTPUT_FILE = "/tmp/osu-test-matric-out.txt"
+    DEFAULT_REGION = "CMH52-CELL02340001"
 )
 
 func (config *AppConfig)printHelp() {
@@ -32,14 +38,16 @@ func (config *AppConfig)printHelp() {
            "\n\t Running OSU MPI benchmark tests on EC2 instances " +
            "\n\t   USAGE: ./ec2-osu-benchmark {ARGS}" +
            "\n\t   ARGS:" +
-           "\n\t    -help / -h                          :- Display help and exit." +
-           "\n\t    -c <count> / -mpicount <count>      :- Number of MPI processes/cores" +
-           "\n\t    -f <file> / -hostfile <file>        :- hostfile with MPI host info" +
-           "\n\t    -l <loglevel>/ -loglevel <loglevel> :- loglevel for the application(Default :2)" +
-           "\n\t                                             1. Trace" +
-           "\n\t                                             2. Info" +
-           "\n\t                                             3. Warning" +
-           "\n\t                                             4. Error" +
+           "\n\t    -help / -h                              :- Display help and exit." +
+           "\n\t    -c <count> / -mpicount <count>          :- Number of MPI processes/cores" +
+           "\n\t    -f <file> / -hostfile <file>            :- hostfile with MPI host info" +
+           "\n\t    -r <region>/ -region <region>           :- Region of ec2 instance" +
+           "\n\t    -m <matric file>/ -mfile <matric file>  :- matric output file" +
+           "\n\t    -l <loglevel>/ -loglevel <loglevel>     :- loglevel for the application(Default :2)" +
+           "\n\t                                              1. Trace" +
+           "\n\t                                              2. Info" +
+           "\n\t                                              3. Warning" +
+           "\n\t                                              4. Error" +
            "\n\n"
     fmt.Print(helpstr)
 }
@@ -57,6 +65,14 @@ func (config *AppConfig)InitConfig() error{
                                    "hostfile with MPI host info")
     mpihostfileLong := flag.String("hostfile", DEFAULT_MPI_HOSTFILE,
                                    "hostfile with MPI host info")
+    matricFileShort := flag.String("m", DEFAULT_MATRIC_OUTPUT_FILE,
+                                  "matric output file")
+    matricFileLong := flag.String("mfile", DEFAULT_MATRIC_OUTPUT_FILE,
+                                  "matric output file")
+    regionShort := flag.String("r", DEFAULT_REGION,
+                                "Region of ec2 instance")
+    regionLong := flag.String("region", DEFAULT_REGION,
+                                "Region of ec2 instance")
     loglevelShort := flag.Int64("l", DEFAULT_LOG_LEVEL,
                                 "loglevel for the application")
     loglevellong := flag.Int64("loglevel", DEFAULT_LOG_LEVEL,
@@ -82,10 +98,32 @@ func (config *AppConfig)InitConfig() error{
         fmt.Print("Hostfile is not present, cannot run tests \n")
         return err
     }
- 
-    fmt.Printf("\n*** Running test with cores/processes : %d , hostfile : %s " +
+
+    config.Region = *regionShort
+    if config.Region == DEFAULT_REGION {
+        config.Region = *regionLong
+    }
+    config.MatricFile = *matricFileShort
+    if config.MatricFile == DEFAULT_MATRIC_OUTPUT_FILE {
+        config.MatricFile = *matricFileLong
+    }
+
+    // Populate the external host name of the instance
+    var res []byte
+    config.HostName="localhost"
+    awsFindDNSCmd := "curl -s http://169.254.169.254/latest/meta-data/public-hostname"
+    res, err = exec.Command("sh","-c", awsFindDNSCmd).Output()
+    if err == nil {
+        config.HostName = string(res)
+    } else {
+        fmt.Printf("Failed to collect hostname of ec-2 instance err : %s", err)
+    }
+    fmt.Printf("\n*** Running test on %s with cores/processes : %d , hostfile : %s, " +
+               " Region %s, MatricFile %s, "+
                "LogFile : %s, LogLevel %s ***\n",
+               config.HostName,
                config.MPIcount, config.HostFile,
+               config.Region, config.MatricFile,
                config.LogFile, logging.LogLevelStr[config.Loglevel - 1])
-    return err
+    return errors.OP_SUCCESS
 }

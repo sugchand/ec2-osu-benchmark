@@ -137,11 +137,12 @@ func (mpi_cmd_obj *OSU_MPI_cmds)write_to_file(result *osu_result_channel) error{
         logger.Error("Failed to create result file %s", resultFileName)
         return err
     }
+    defer fp.Close()
     _, err = fp.Write([]byte(resultData))
     if err != nil {
         logger.Error("Failed to write results to file %s", resultFileName)
     }
-    fp.Close()
+
     return errors.OP_SUCCESS
 }
 

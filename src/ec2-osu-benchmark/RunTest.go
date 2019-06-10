@@ -35,9 +35,10 @@ func Runtests(configObj *config.AppConfig,
     osu_mpi_tests.Run_OSU_MPI_Cmds()
     return errors.OP_SUCCESS
 }
-func Write2Json(path string) {
+func Write2Json(configObj *config.AppConfig,
+                path string) {
     jsonwrite := new(text2json.Text2Json)
-    jsonwrite.Init(path)
+    jsonwrite.Init(configObj, path)
     jsonwrite.ProcessResults2Json()
 }
 
@@ -60,5 +61,5 @@ func main() {
     osu_mpi_tests.ExitresultWriteRoutine()
     syncObj.JoinAllRoutines()
     // Write to json only after all go-routines are done with its processing
-    Write2Json(osu_mpi_tests.Get_OSU_MPI_test_result_path())
+    Write2Json(configObj, osu_mpi_tests.Get_OSU_MPI_test_result_path())
 }
