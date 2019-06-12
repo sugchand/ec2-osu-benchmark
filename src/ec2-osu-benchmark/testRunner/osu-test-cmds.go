@@ -71,7 +71,8 @@ func (mpi_cmd_obj *OSU_MPI_cmds)Init_OSU_MPI_Cmds(MPIcount uint,
         logger.Error("Failed to find 'mpirun' in the system")
         return errors.CMD_NOT_FOUND
     }
-    mpi_cmd_obj.mpirunCmd = fmt.Sprintf("mpirun --np %d --hostfile %s",
+    mpi_cmd_obj.mpirunCmd = fmt.Sprintf("mpirun --allow-run-as-root " +
+                             "--np %d --hostfile %s",
                              MPIcount, hostfile)
     // TODO :: May need to allow selective command execution.
     mpi_cmd_obj.osu_cmds = osu_cmds

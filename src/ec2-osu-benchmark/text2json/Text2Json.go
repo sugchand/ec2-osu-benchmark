@@ -158,11 +158,24 @@ func (txt2jsonObj *Text2Json)ReadOSULatencyFile(fileName string,
     return errors.OP_SUCCESS
 }
 
+// Before creating any logs, its necessary to create all the apollo directory
+// structure to report matric
+func (txt3jsonObj *Text2Json)SetupApolloEnv() {
+    var err error
+    logger := logging.GetLoggerInstance()
+    err = os.MkdirAll(config.DEFAULT_APOLLO_ENV_DIR, os.ModePerm)
+    if err != nil {
+        logger.Error("Failed to create apollo env, matric push may fail" +
+                     " err : %s", err)
+    }
+}
+
 func (txt2jsonObj *Text2Json)Init(configObj *config.AppConfig,resPath string) {
     txt2jsonObj.GetAllFiles(resPath)
     txt2jsonObj.jsonResults = new(OSUResults)
     txt2jsonObj.jsonFile = resPath + "osu-report.json"
     txt2jsonObj.configObj = configObj
+    txt2jsonObj.SetupApolloEnv()
 }
 
 func (txt2jsonObj *Text2Json)Read2JsonStruct() {
@@ -234,21 +247,32 @@ func (txt2jsonObj *Text2Json)AppendBW2MatricOutput(starttime time.Time,
     *result = *result + "\nEOE\n"
 }
 
+// Matric file name should have the specific timestamp information
+// File get rolled in every hour based on the timestamp
+func (txt2jsonObj *Text2Json)GetMatricFileName() string {
+    t := time.Now()
+    day := t.Format("2006-01-02")
+    hour := t.Hour()
+    return  fmt.Sprintf("%s%s-%d",config.DEFAULT_MATRIC_OUTPUT_FILE_PREFIX,
+                                  day, hour)
+
+}
 func (txt2jsonObj *Text2Json)_Write2MatricFile(result string) error{
     logger := logging.GetLoggerInstance()
-    fp, err := os.OpenFile(txt2jsonObj.configObj.MatricFile,
+    fileName := txt2jsonObj.GetMatricFileName()
+    fp, err := os.OpenFile(fileName,
                            os.O_APPEND|os.O_CREATE|os.O_WRONLY,
                            0644)
     if err != nil {
         logger.Error("Failed to create/open matric file %s",
-                            txt2jsonObj.configObj.MatricFile)
+                            fileName)
         return err
     }
     defer fp.Close()
     _, err = fp.Write([]byte(result))
     if err != nil {
         logger.Error("Failed to write results to file %s",
-                        txt2jsonObj.configObj.MatricFile)
+                        fileName)
     }
     return errors.OP_SUCCESS
 }
