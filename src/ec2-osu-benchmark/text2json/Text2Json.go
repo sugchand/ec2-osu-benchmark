@@ -220,16 +220,18 @@ func (txt2jsonObj *Text2Json)AppendBW2MatricOutput(starttime time.Time,
                             result *string) {
     *result = "--------------------------------------------\n" +
               "StartTime=" + strconv.FormatInt(starttime.Unix(), 10) + "\n" +
-              "Program=ec2-osu-benchmark\n" +
-              "Marketplace=" + txt2jsonObj.configObj.Region + "\n" +
               "Host=" + txt2jsonObj.configObj.HostName + "\n" +
-              "Metrics="
+              "Marketplace=" + txt2jsonObj.configObj.Region + "\n" +
+              "Program=ec2-osu-benchmark-bw\n" +
+              "Time=0\n" +
+             "Metrics="
     for _,entry := range bwvalues {
-        *result = fmt.Sprintf("%sbw|%d|%s=%f,",*result,
+        *result = fmt.Sprintf("%s%s|%d|%s=%f,",*result,
+                               txt2jsonObj.configObj.HostName,
                                entry.Pktsize,
                                valuename, entry.Bw)
     }
-    *result = *result + "\n"
+    *result = *result + "\nEOE\n"
 }
 
 func (txt2jsonObj *Text2Json)_Write2MatricFile(result string) error{
